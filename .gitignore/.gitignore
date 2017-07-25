@@ -1,0 +1,110 @@
+[[MistManager sharedInstance] addEvent:@"didConnect" forTarget:self];
+
+	@params  isConnected represents if user are successfully connected to device*
+	-(void)mistManager:(MSTCentralManager *)manager didConnect:(BOOL)isConnected  
+  
+   [[MistManager sharedInstance] addEvent:@"didUpdateMap" forTarget:self];
+   -(void)mistManager:(MSTCentralManager *)manager didUpdateMap:(MSTMap *)map at:(NSDate *)dateUpdated{
+   [Default performBlockOnMainThread:^{
+       if (map) {
+       // You are Indoor
+       [self.view makeToast:[NSString stringWithFormat:@"You are in %@",map.mapName]];
+ 
+   } else {
+      // You are out of tracking Zone  or Outdoor
+       [self.view makeToast:@"You are OutDoor"];
+   }
+   }];}
+   
+    [[MistManager sharedInstance] addEvent:@"didUpdateRelativeLocation" forTarget:self];   
+   
+   
+    This function is called when we have both relative location and the actual map details for rendering. Called when Framework receives a location update and has map information.
+
+	-(void)mistManager: (MSTCentralManager *) manager didUpdateRelativeLocation: (MSTPoint *) relativeLocation inMaps: (NSArray *) maps at: (NSDate *) dateUpdated{
+	To draw the floorimage in a UIView initialze the MSTWayfinder and pass the Map object to  MSTWayfinder
+   For more info please see the the sample app for how to add a floor image 
+   To draw a blue dot use the below method of MSTWayfinder.
+   Check out the sample app code for more details 
+   drawDotViewAtCGPoint:(CGPoint)point forIndex:(NSUInteger)index shouldMove:(BOOL)shouldMove shouldShowMotion:(bool)showMotion
+	
+   }
+
+[[MistManager sharedInstance] addEvent:@"didReceiveNotificationMessage" forTarget:self];   
+   
+   -(void)mistManager:(MSTCentralManager *)manager didReceiveNotificationMessage:(NSDictionary *)payload{
+
+       NSDictionary *message = [payload objectForKey:@"message"];
+       if ([[payload objectForKey:@"type"] isEqualToString:@"zones-events"]) {
+           // Show Zone Events
+       }
+       if ([[payload objectForKey:@"type"] isEqualToString:@"zone-event-vb"]) {
+
+           // Show Virtual Beacon Notification
+       }
+   }
+   
+   -(void)loadWayfindingData:(NSDictionary *)mapJSON{
+        NSArray *nodesFromFile = [mapJSON objectForKey:@"nodes"];
+        MSTGraph *graph = [[MSTGraph alloc] init];
+        NSMutableDictionary *nodes = [[NSMutableDictionary alloc] init];
+        
+        for (NSDictionary *aNode in nodesFromFile) {
+            CGFloat x = [aNode[@"position"][@"x"] doubleValue];
+            CGFloat y = [aNode[@"position"][@"y"] doubleValue];
+            [self.nodes setObject:[[MSTNode alloc] initWithName:aNode[@"name"] andPoint:CGPointMake(x,y) andEdges:aNode[@"edges"]] forKey:aNode[@"name"]];
+        }
+        for (NSString *key in self.nodes) {
+            MSTNode *node = self.nodes[key];
+            [self calculateEdgeDistanceForNode:node];
+            [graph addVertex:node.nodeName withEdges:node.edges];
+        }
+    }
+}
+
+-(void)calculateEdgeDistanceForNode:(MSTNode *)node{
+    NSMutableDictionary *tempEdge = [[NSMutableDictionary alloc] init];
+    for (NSString *nodeName in node.edges) {
+        MSTNode *otherNode = [self.nodes objectForKey:nodeName];
+        double x = pow(node.nodePoint.x-otherNode.nodePoint.x, 2)+pow(node.nodePoint.y-otherNode.nodePoint.y, 2);
+        double d = sqrt(x);
+        [tempEdge setObject:[NSString stringWithFormat:@"%lf",d] forKey:nodeName];
+    }
+    node.edges = [tempEdge mutableCopy];
+}
+
+Once you added the MSTWayfinder view in your viewcontroller you can set the boolean showSkeletonView true/false to see all possible paths
+
+**To draw Wayfinding from origin to destination**
+
+MSTWayfinder indoorMapview = [[MSTWayfinder alloc] initWithFrame:self.view.bounds];
+                                [indoorMapview setOriginNodeUsingPoint:startingFVPoint];
+                                
+                                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0L), ^{
+                                    CGPathRef path = [self.indoorMapView renderWayfinding2];
+                                    if (path != NULL) {
+                                        CGPathRetain(path);
+                                        [Default performBlockOnMainThread:^{
+                                            [indoorMapview drawWayUsingPath:path enable:true];
+                                            CGPathRelease(path);
+                                        }];
+                                    }
+                                });
+                                
+//Get the closest point  
+CGPoint stpPoint = [self.indoorMapView closestPointOnAllPaths:fvPoint];
+                                   
+MSTPoint *snapPoint = [[MSTPoint alloc] initWithCGPoint:stpPoint];
+[self.indoorMapView drawSnapToPath:[snapPoint convertToCGPoint] shouldMove:[[result objectForKey:@"canMove"] boolValue] shouldShowMotion:[[result objectForKey:@"showYellow"] boolValue]];
+
+[[MistManager sharedInstance] addEvent:@"didReceivedVirtualBeacons" forTarget:self];
+
+-(void)mistManager:(MSTCentralManager *)manager didReceivedVirtualBeacons:(NSDictionary *)virtualBeacons{
+  for (NSDictionary *vbeacon in virtualBeacons) {
+           NSLog(@"%@",[vbeacon objectForKey:@"name"]); 
+
+       }
+}
+
+[self.mstCentralManager backgroundAppSetting:true];
+[self.mstCentralManager setSentTimeInBackgroundInMins:0.5 restTimeInBackgroundInMins:5];
